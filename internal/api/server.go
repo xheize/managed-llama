@@ -3,6 +3,7 @@ package api
 import (
 	"embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"log"
@@ -343,7 +344,11 @@ func (s *Server) uploadModel(w http.ResponseWriter, r *http.Request) {
 	}
 	model, err := s.store().SaveUpload(header)
 	if err != nil {
-		writeError(w, 400, err)
+		status := http.StatusBadRequest
+		if errors.Is(err, models.ErrWriteConflict) {
+			status = http.StatusConflict
+		}
+		writeError(w, status, err)
 		return
 	}
 	writeJSON(w, 201, model)
@@ -409,7 +414,11 @@ func (s *Server) downloadHF(w http.ResponseWriter, r *http.Request) {
 	}
 	job, err := s.hfClient().StartDownload(input.Repo, input.File, dest)
 	if err != nil {
-		writeError(w, 400, err)
+		status := http.StatusBadRequest
+		if errors.Is(err, models.ErrWriteConflict) {
+			status = http.StatusConflict
+		}
+		writeError(w, status, err)
 		return
 	}
 	writeJSON(w, 202, job)

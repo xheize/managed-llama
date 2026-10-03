@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -118,15 +117,15 @@ func (c *Client) StartDownload(repo, file, destination string) (*Job, error) {
 	if repo == "" || file == "" {
 		return nil, errors.New("repo and file are required")
 	}
-	if _, err := os.Stat(destination); err == nil {
-		return nil, fmt.Errorf("destination already exists: %s", filepath.Base(destination))
-	} else if !errors.Is(err, os.ErrNotExist) {
+	out, err := models.BeginWrite(destination)
+	if err != nil {
 		return nil, err
 	}
 	c.mu.Lock()
 	for _, active := range c.jobs {
 		if active.Destination == destination && (active.State == "queued" || active.State == "downloading") {
 			c.mu.Unlock()
+			out.Close()
 			return nil, errors.New("the same file is already downloading")
 		}
 	}
@@ -135,7 +134,7 @@ func (c *Client) StartDownload(repo, file, destination string) (*Job, error) {
 	c.jobs[id] = job
 	c.mu.Unlock()
 	copy := *job
-	go c.download(job)
+	go c.download(job, out)
 	return &copy, nil
 }
 
@@ -150,7 +149,12 @@ func (c *Client) Jobs() []Job {
 	return out
 }
 
-func (c *Client) download(job *Job) {
+func (c *Client) download(job *Job, out *models.PendingWrite) {
+	defer out.Close()
+	fail := func(err error) {
+		out.Close()
+		c.fail(job.ID, err)
+	}
 	c.update(job.ID, func(j *Job) { j.State = "downloading" })
 	base, token := c.settings()
 	downloadURL := base + "/" + escapeRepo(job.Repo) + "/resolve/main/" + escapePath(job.File) + "?download=true"
@@ -159,44 +163,25 @@ func (c *Client) download(job *Job) {
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		c.fail(job.ID, err)
+		fail(err)
 		return
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		c.fail(job.ID, fmt.Errorf("Hugging Face returned %s", resp.Status))
-		return
-	}
-	if err := os.MkdirAll(filepath.Dir(job.Destination), 0o755); err != nil {
-		c.fail(job.ID, err)
-		return
-	}
-	tmp := job.Destination + ".part"
-	out, err := os.Create(tmp)
-	if err != nil {
-		c.fail(job.ID, err)
+		fail(fmt.Errorf("Hugging Face returned %s", resp.Status))
 		return
 	}
 	c.update(job.ID, func(j *Job) { j.Total = resp.ContentLength })
 	w := &progressWriter{writer: out, update: func(n int64) { c.update(job.ID, func(j *Job) { j.Downloaded = n }) }}
 	_, err = io.Copy(w, resp.Body)
-	closeErr := out.Close()
 	if err == nil {
-		err = closeErr
-	}
-	if err == nil {
-		if _, valid := models.Inspect(tmp); !valid {
-			err = errors.New("downloaded file does not contain a supported GGUF header")
-		}
-	}
-	if err == nil {
-		err = os.Rename(tmp, job.Destination)
+		err = out.Commit()
 	}
 	if err != nil {
-		os.Remove(tmp)
-		c.fail(job.ID, err)
+		fail(err)
 		return
 	}
+	out.Close()
 	c.update(job.ID, func(j *Job) {
 		j.Downloaded = w.written
 		j.State = "completed"

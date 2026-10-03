@@ -1,6 +1,10 @@
 package hf
 
 import (
+	"bytes"
+	"errors"
+	"managed-llama/internal/models"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -9,6 +13,89 @@ import (
 	"testing"
 	"time"
 )
+
+func TestUploadAndDownloadCannotShareDestination(t *testing.T) {
+	started, release := make(chan struct{}), make(chan struct{})
+	original := []byte("GGUF\x02\x00\x00\x00DOWNLOAD")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		close(started)
+		<-release
+		w.Write(original)
+	}))
+	defer server.Close()
+	released := false
+	defer func() {
+		if !released {
+			close(release)
+		}
+	}()
+	dir := t.TempDir()
+	destination := filepath.Join(dir, "model.gguf")
+	client := New(server.URL, "test")
+	if _, err := client.StartDownload("org/model", "model.gguf", destination); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-started:
+	case <-time.After(3 * time.Second):
+		t.Fatal("download did not start")
+	}
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	part, err := writer.CreateFormFile("file", "MODEL.gguf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	part.Write([]byte("GGUF\x03\x00\x00\x00UPLOAD"))
+	writer.Close()
+	request := httptest.NewRequest("POST", "http://localhost/upload", &body)
+	request.Header.Set("Content-Type", writer.FormDataContentType())
+	if err := request.ParseMultipartForm(1024); err != nil {
+		t.Fatal(err)
+	}
+	defer request.MultipartForm.RemoveAll()
+	if _, err := (models.Store{Dir: dir}).SaveUpload(request.MultipartForm.File["file"][0]); !errors.Is(err, models.ErrWriteConflict) {
+		t.Fatalf("concurrent upload not rejected: %v", err)
+	}
+	// The reservation spans different clients, too.
+	if _, err := New(server.URL, "test").StartDownload("org/other", "model.gguf", destination); !errors.Is(err, models.ErrWriteConflict) {
+		t.Fatalf("second client not rejected: %v", err)
+	}
+	close(release)
+	released = true
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		state := client.Jobs()[0].State
+		if state == "failed" {
+			t.Fatalf("download failed: %+v", client.Jobs())
+		}
+		if state == "completed" {
+			data, err := os.ReadFile(destination)
+			if err != nil || !bytes.Equal(data, original) {
+				t.Fatalf("download corrupted: %q %v", data, err)
+			}
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatal("download did not complete")
+}
+
+func TestDownloadRespectsUploadReservation(t *testing.T) {
+	destination := filepath.Join(t.TempDir(), "model.gguf")
+	upload, err := models.BeginWrite(destination)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer upload.Close()
+	client := New("http://127.0.0.1:1", "test")
+	if _, err := client.StartDownload("org/model", "model.gguf", destination); !errors.Is(err, models.ErrWriteConflict) {
+		t.Fatalf("download was allowed during upload: %v", err)
+	}
+	if len(client.Jobs()) != 0 {
+		t.Fatal("rejected download created a job")
+	}
+}
 
 func TestSearchFilesAndDownload(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

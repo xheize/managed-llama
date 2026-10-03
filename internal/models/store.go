@@ -71,27 +71,15 @@ func (s Store) SaveUpload(header *multipart.FileHeader) (Model, error) {
 	if err != nil {
 		return Model{}, err
 	}
-	tmp := dest + ".part"
-	out, err := os.OpenFile(tmp, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
+	out, err := BeginWrite(dest)
 	if err != nil {
 		return Model{}, err
 	}
-	_, copyErr := io.Copy(out, src)
-	closeErr := out.Close()
-	if copyErr != nil {
-		os.Remove(tmp)
-		return Model{}, copyErr
+	defer out.Close()
+	if _, err := io.Copy(out, src); err != nil {
+		return Model{}, err
 	}
-	if closeErr != nil {
-		os.Remove(tmp)
-		return Model{}, closeErr
-	}
-	if _, valid := Inspect(tmp); !valid {
-		os.Remove(tmp)
-		return Model{}, errors.New("file does not contain a valid GGUF header")
-	}
-	if err := os.Rename(tmp, dest); err != nil {
-		os.Remove(tmp)
+	if err := out.Commit(); err != nil {
 		return Model{}, err
 	}
 	models, err := s.List()
