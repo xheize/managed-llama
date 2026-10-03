@@ -1,0 +1,31 @@
+.check-option {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 10px;
+  padding: 11px;
+  border: 1px solid #2c343f;
+  border-radius: 9px;
+  background: #090d11;
+  cursor: pointer;
+}
+
+.check-option input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--lime);
+}
+
+.check-option span {
+  display: grid;
+  gap: 3px;
+}
+
+.check-option b {
+  color: var(--text);
+}
+
+.check-option small {
+  color: var(--muted);
+}

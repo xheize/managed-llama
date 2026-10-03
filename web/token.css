@@ -1,0 +1,11 @@
+.token-field{display:grid;gap:6px}
+.token-input{position:relative}
+.token-input input{padding-right:48px}
+.token-input button{position:absolute;right:3px;top:3px;bottom:3px;display:flex;align-items:center;justify-content:center;width:40px;padding:0;background:transparent;border:0;color:var(--muted)}
+.token-input button:hover{color:var(--text)}
+.token-input button:focus-visible{outline:2px solid var(--cyan);outline-offset:-2px}
+.token-input button[aria-pressed="true"] .eye-slash{display:none}
+dialog#serviceLogin{max-width:520px;width:calc(100% - 40px);padding:28px;border:1px solid var(--muted);border-radius:16px;background:var(--panel,#141a24);color:var(--text,#edf3fa)}
+dialog#serviceLogin::backdrop{background:rgba(0,0,0,.75)}
+#serviceLogin input{display:block;width:100%;margin:12px 0}
+#serviceLoginError{color:#ff8b8b}

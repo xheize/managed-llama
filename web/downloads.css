@@ -1,0 +1,7 @@
+nav{flex-wrap:wrap;column-gap:24px;row-gap:0}
+#downloadJobs .job{min-width:0;overflow-wrap:anywhere}
+#downloadJobs h3{font-size:14px;margin:0 0 8px}
+#downloadJobs progress{width:100%;height:12px;accent-color:var(--cyan)}
+#downloadJobs p{margin:7px 0;color:var(--muted)}
+#downloadJobs p.danger{color:var(--red)}
+#downloads label{margin-top:14px;max-width:240px}

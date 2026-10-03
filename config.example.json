@@ -1,0 +1,15 @@
+{
+  "update_repository": "https://github.com/OWNER/managed-llama",
+  "server_path": "llama-server.exe",
+  "models_dir": "models",
+  "selected_model": "",
+  "host": "127.0.0.1",
+  "port": 8080,
+  "context_size": 4096,
+  "gpu_layers": -1,
+  "threads": 0,
+  "parallel": 1,
+  "models_max": 1,
+  "arguments": "--models-dir {models_dir} --models-max {models_max} --host {host} --port {port} --ctx-size {ctx} --n-gpu-layers {gpu_layers} --parallel {parallel}",
+  "hugging_face_base": "https://huggingface.co"
+}
