@@ -3,11 +3,43 @@ package api
 import (
 	"bufio"
 	"fmt"
+	"managed-llama/internal/serviceauth"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 )
+
+func TestNativeControlRejectsCrossSiteBeforeProxy(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer upstream.Close()
+	proxy := dynamicReverseProxy(func() (string, bool) { return upstream.URL, true }, false, nil)
+	handler := serviceauth.RequireLocalHost(sameOriginControl(http.StripPrefix("/llama", proxy)))
+	for _, route := range []string{"/llama/models/load", "/llama/models/unload"} {
+		for _, test := range []struct {
+			origin, site string
+			want         int
+		}{
+			{"https://untrusted.example", "cross-site", http.StatusForbidden},
+			{"https://untrusted.example", "", http.StatusForbidden},
+			{"", "cross-site", http.StatusForbidden},
+			{"http://127.0.0.1:3030", "same-origin", http.StatusNoContent},
+			{"", "", http.StatusNoContent},
+		} {
+			r := httptest.NewRequest("POST", "http://127.0.0.1:3030"+route, strings.NewReader(`{"model":"example"}`))
+			r.Header.Set("Origin", test.origin)
+			r.Header.Set("Sec-Fetch-Site", test.site)
+			r.Header.Set("Content-Type", "text/plain")
+			w := httptest.NewRecorder()
+			handler.ServeHTTP(w, r)
+			if w.Code != test.want {
+				t.Fatalf("%s origin=%q site=%q: %d", route, test.origin, test.site, w.Code)
+			}
+		}
+	}
+}
 
 func TestOpenAIProxyPreservesPathBodyAndStreaming(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

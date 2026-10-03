@@ -450,7 +450,8 @@ func securityHeaders(next http.Handler) http.Handler {
 }
 func sameOriginControl(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.URL.Path, "/api/") && r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodOptions {
+		control := strings.HasPrefix(r.URL.Path, "/api/") || r.URL.Path == "/llama" || strings.HasPrefix(r.URL.Path, "/llama/")
+		if control && r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodOptions {
 			if strings.EqualFold(r.Header.Get("Sec-Fetch-Site"), "cross-site") {
 				writeError(w, http.StatusForbidden, fmt.Errorf("cross-site control requests are not allowed"))
 				return
