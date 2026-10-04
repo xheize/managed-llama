@@ -33,7 +33,7 @@ type Config struct {
 
 func Default() Config {
 	return Config{
-		UpdateRepository: updates.ExampleRepository,
+		UpdateRepository: "https://github.com/xheize/managed-llama",
 		ServerPath:       "llama-server.exe",
 		ModelsDir:        "models",
 		Host:             "127.0.0.1",

@@ -9,6 +9,12 @@ import (
 	"testing"
 )
 
+func TestDefaultUpdateRepository(t *testing.T) {
+	if got := Default().UpdateRepository; got != "https://github.com/xheize/managed-llama" {
+		t.Fatalf("unexpected default update repository: %q", got)
+	}
+}
+
 func TestTokenStorageEncodingAndRemoval(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.json")
 	cfg := Default()

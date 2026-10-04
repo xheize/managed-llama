@@ -1,5 +1,5 @@
 {
-  "update_repository": "https://github.com/OWNER/managed-llama",
+  "update_repository": "https://github.com/xheize/managed-llama",
   "server_path": "llama-server.exe",
   "models_dir": "models",
   "selected_model": "",

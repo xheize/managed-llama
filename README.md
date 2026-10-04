@@ -31,7 +31,7 @@ HTTP Host는 `localhost` 또는 loopback IP와 포트만 허용합니다. 임의
 ## 요구 사항
 
 - Windows
-- Go 1.25.1 이상: 소스 실행 및 빌드에 필요
+- Go 1.26.8 이상: 소스 실행 및 빌드에 필요
 - `--models-dir`와 모델 load/unload API를 지원하는 `llama-server` 바이너리
 - 실행할 GGUF 모델과 모델에 필요한 메모리
 - NVIDIA GPU 정보를 표시하려면 `nvidia-smi`를 사용할 수 있는 드라이버 환경
@@ -282,10 +282,11 @@ Get-Content -LiteralPath "$installDir\config.json.service-key"
 서버가 실행 파일을 다운로드하고 검증한 뒤 교체합니다. 다운로드 진행률과 오류도
 같은 화면에 표시됩니다. 다운로드만으로 자동 설치하지 않으며 버튼에서 확인해야 합니다.
 
-기본 배포 주소는 `https://github.com/OWNER/managed-llama`라는 **예시 값**입니다.
-실제 주소를 등록하기 전에는 GitHub 조회나 다운로드를 하지 않습니다. 준비되면
-화면의 배포 주소 또는 `config.json`의 `update_repository`를 공개 GitHub 저장소 URL로
-변경하세요. 접속 시와 페이지가 열려 있는 동안 30분 간격으로 새 버전을 확인합니다.
+기본 배포 주소는 `https://github.com/xheize/managed-llama`입니다.
+기존 설정에 `https://github.com/OWNER/managed-llama` 예시 값이 남아 있으면
+화면의 배포 주소 또는 `config.json`의 `update_repository`를 위 주소로 변경하세요.
+예시 값에서는 GitHub 조회나 다운로드를 하지 않습니다.
+접속 시와 페이지가 열려 있는 동안 30분 간격으로 새 버전을 확인합니다.
 비공개 저장소, 임의 다운로드 URL, 사전 릴리스는 지원하지 않습니다.
 
 배포 릴리스에는 `v1.2.3` 형식의 정식 태그와 다음 파일이 필요합니다.
