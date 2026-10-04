@@ -1,10 +1,10 @@
 module managed-llama
 
-go 1.25.1
+go 1.26.8
 
 require (
 	github.com/getlantern/systray v1.2.2
-	golang.org/x/sys v0.1.0
+	golang.org/x/sys v0.44.0
 )
 
 require (
