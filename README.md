@@ -489,7 +489,16 @@ tests/                   JavaScript UI 테스트
 
 ## 공개 및 릴리스 준비
 
-Windows CI는 Go 테스트·vet, UI 테스트, 포맷 검사와 릴리스 빌드를 수행합니다.
+Woodpecker CI (`.woodpecker.yml`)는 Linux/k3s 에이전트에서 실행합니다.
+push, pull request, 수동 실행 시 Go 포맷·모듈 무결성 검사, Windows 대상 vet,
+앱과 Go 테스트의 Windows 교차 컴파일, Node.js UI 테스트를 수행합니다.
+CI에는 배포·릴리스 업로드, 비밀값, privileged 컨테이너가 필요하지 않습니다.
+Woodpecker 서버에서 이 GitHub 저장소를 활성화하고 webhook을 연결해야 실행됩니다.
+
+**교차 컴파일은 Windows 테스트 실행을 대신하지 않습니다.** Windows에서는 별도로
+`go test ./...`, `go vet ./...`, `node --test tests/*.test.cjs`와 아래 릴리스 빌드를
+실행해야 합니다. 실행 파일 버전 확인과 라이선스 수집도 Windows 릴리스 빌드에서
+검증합니다. GitHub Actions 워크플로는 사용하지 않습니다.
 보안 범위와 제보 방법은 [SECURITY.md](SECURITY.md)를 참고하세요.
 
 버전을 포함한 업데이트용 실행 파일과 의존성 라이선스는 다음 명령으로 생성합니다.

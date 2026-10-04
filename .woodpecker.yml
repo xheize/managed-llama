@@ -1,0 +1,18 @@
+# Linux/Kubernetes runner: Windows tests are compiled, not executed here.
+when:
+  - event: [push, pull_request, manual]
+
+steps:
+  - name: windows-static-and-cross-build
+    image: golang:1.26.8-bookworm
+    environment:
+      GOOS: windows
+      GOARCH: amd64
+      CGO_ENABLED: "0"
+    commands:
+      - sh scripts/ci-cross-build.sh
+
+  - name: ui-tests
+    image: node:24-bookworm-slim
+    commands:
+      - node --test tests/*.test.cjs
