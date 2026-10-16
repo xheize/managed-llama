@@ -114,6 +114,9 @@ func runUserSession(configPath, listen string, installed bool) error {
 	client := newServiceClient(listen)
 	client.key = func() (string, error) {
 		installed, err := windowsServiceInstalled()
+		if err == nil && !installed && !windows.GetCurrentProcessToken().IsElevated() && os.Getenv("MANAGED_LLAMA_REMOTE_HOSTS") != "" {
+			return os.Getenv("MANAGED_LLAMA_REMOTE_KEY"), nil
+		}
 		if err != nil || (!installed && !windows.GetCurrentProcessToken().IsElevated()) {
 			return "", err
 		}

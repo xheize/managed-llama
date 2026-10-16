@@ -19,7 +19,7 @@ test('privileged API asks for authentication on 401',async()=>{
 test('key header preserves request content type and body',async()=>{
   const f=fixture(async(url,options)=>{
     assert.equal(url,'/api/config');
-    assert.equal(options.headers.get('X-Managed-Llama-Key'),'test-service-key');
+    assert.equal(options.headers.get('Authorization'),'Bearer test-service-key');
     assert.equal(options.headers.get('Content-Type'),'application/json');
     assert.equal(options.body,'{}');
     return {status:204,ok:true};
@@ -28,7 +28,7 @@ test('key header preserves request content type and body',async()=>{
 });
 test('ordinary user mode does not invent a service key',async()=>{
   const f=fixture(async(url,options)=>{
-    assert.equal(options.headers.has('X-Managed-Llama-Key'),false);
+    assert.equal(options.headers.has('Authorization'),false);
     return {status:204,ok:true};
   });
   await f.run("api('/api/state')");

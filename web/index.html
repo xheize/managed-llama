@@ -14,11 +14,11 @@
 <body>
   <dialog id="serviceLogin" aria-labelledby="serviceLoginTitle">
     <form id="serviceLoginForm">
-      <h2 id="serviceLoginTitle">서비스 관리자 인증</h2>
-      <p>관리자 권한으로 설정 파일 옆의 <code>config.json.service-key</code>를 열어 관리 키를 입력하세요.</p>
-      <label for="serviceKey">서비스 관리 키</label>
+      <h2 id="serviceLoginTitle">API 키 인증</h2>
+      <p>원격 모드는 실행 시 설정한 API 키를 입력하세요. Windows 서비스 모드는 관리자 권한으로 설정 파일 옆의 <code>config.json.service-key</code>에서 키를 확인하세요.</p>
+      <label for="serviceKey">API 키</label>
       <input id="serviceKey" type="password" autocomplete="off" required>
-      <p class="hint">키는 이 페이지의 메모리에서만 사용하며 새로고침하면 다시 입력해야 합니다. 키를 입력한 브라우저에서는 SYSTEM 권한의 서비스를 제어할 수 있습니다.</p>
+      <p class="hint">키는 이 페이지의 메모리에서만 사용하며 새로고침하면 다시 입력해야 합니다. 이 키로 프로그램을 제어할 수 있으므로 공유하지 마세요.</p>
       <p id="serviceLoginError" role="alert"></p>
       <button type="submit" class="primary">연결</button>
     </form>

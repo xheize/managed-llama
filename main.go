@@ -160,7 +160,15 @@ func startGateway(configPath, listen string, enableLoginAutostart bool) (*gatewa
 }
 
 func startGatewayWithOptions(configPath, listen string, enableLoginAutostart bool, options gatewayOptions) (*gatewayRuntime, error) {
-	if !isLoopbackListen(listen) {
+	hosts, key := os.Getenv("MANAGED_LLAMA_REMOTE_HOSTS"), os.Getenv("MANAGED_LLAMA_REMOTE_KEY")
+	wrapHost := serviceauth.RequireLocalHost
+	if hosts != "" || key != "" {
+		var err error
+		wrapHost, err = serviceauth.RemoteAccess(hosts, key)
+		if err != nil {
+			return nil, err
+		}
+	} else if !isLoopbackListen(listen) {
 		return nil, errors.New("관리 게이트웨이는 loopback 주소에서만 실행할 수 있습니다")
 	}
 	if err := os.Chdir(filepath.Dir(configPath)); err != nil {
@@ -189,7 +197,7 @@ func startGatewayWithOptions(configPath, listen string, enableLoginAutostart boo
 	dashboard := api.New(cfg, configPath, web, autostartManager)
 	dashboard.Updates = newWebUpdater(configPath, listen)
 	dashboard.ConfigPolicy = options.policy
-	handler := serviceauth.RequireLocalHost(dashboard.Handler())
+	handler := wrapHost(dashboard.Handler())
 	if options.wrap != nil {
 		handler = options.wrap(handler)
 	}
