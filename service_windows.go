@@ -62,6 +62,9 @@ func runWindowsService(configPath, listen string) error {
 }
 
 func startServiceGateway(configPath, listen string) (*gatewayRuntime, error) {
+	if os.Getenv("MANAGED_LLAMA_REMOTE_HOSTS") != "" || os.Getenv("MANAGED_LLAMA_REMOTE_KEY") != "" {
+		return nil, errors.New("remote gateway is supported only in a non-elevated desktop session")
+	}
 	// The Windows service owns the management API only. llama-server is started
 	// exclusively by an explicit API request handled by the gateway.
 	if !isLoopbackListen(listen) {

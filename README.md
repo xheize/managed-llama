@@ -4,11 +4,31 @@ Windows에서 `llama-server` router를 로컬 자식 프로세스로 실행하�
 
 소스 실행 시 `llama-server` 실행 파일과 GGUF 모델을 별도로 준비해야 합니다. 자동 설치 패키지는 빌드 시 지정한 llama.cpp 런타임을 포함하며, 모델은 설치 후 추가합니다. 현재 Windows 전용이며 macOS와 Linux는 지원하지 않습니다.
 
-> **실행 권한:** 일반 사용자 모드는 개인용 로컬 실행을 위한 것으로 관리 API에 인증이 없습니다. 관리자 권한 실행과 Windows 서비스 모드는 관리 키 인증 및 설치 경로 권한 검사를 적용합니다. 관리 키 보유자는 높은 권한으로 프로그램 실행과 프로세스 종료를 요청할 수 있으므로 키를 공유하지 마세요. 모든 관리 포트는 로컬 전용으로 사용하세요.
+> **실행 권한:** 기본 일반 사용자 모드는 로컬 실행을 위한 것으로 관리 API에 인증이 없습니다. 원격 접근을 활성화하면 일반 사용자 모드에도 관리 키 인증을 적용합니다. 관리자 권한 실행과 Windows 서비스 모드는 로컬 전용이며 관리 키 인증 및 설치 경로 권한 검사를 적용합니다.
 
-게이트웨이는 일반 사용자 모드에서도 loopback 주소에만 바인드합니다.
-HTTP Host는 `localhost` 또는 loopback IP와 포트만 허용합니다. 임의 도메인,
-`0.0.0.0`, 외부 IP를 통한 관리 API 공개는 지원하지 않습니다.
+게이트웨이는 기본적으로 loopback 주소에만 바인드하며 HTTP Host도 로컬 주소만 허용합니다.
+
+### 원격 대시보드 (일반 사용자 모드)
+
+HTTPS reverse proxy 뒤에서 원격 접속을 사용할 때는 일반 사용자 PowerShell에서
+허용할 HTTP Host와 32바이트 관리 키를 명시적으로 설정합니다. 예:
+
+```powershell
+$env:MANAGED_LLAMA_REMOTE_HOSTS = 'llama.xheize.cc,192.168.50.10:3030'
+# 최초 한 번 생성한 키를 암호 관리자에 보관하고 이후 실행에도 동일하게 설정합니다.
+$env:MANAGED_LLAMA_REMOTE_KEY = [Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(32)).ToLowerInvariant()
+.\managed-llama.exe -config .\config.json -listen 0.0.0.0:3030
+```
+
+프록시는 원래 Host를 유지하고 `192.168.50.10:3030`으로 전달해야 합니다.
+`llama.xheize.cc`에 접속한 뒤 대시보드의 관리 키 입력란에 설정한 키를 입력합니다.
+API 클라이언트는 `Authorization: Bearer <API 키>`로 같은 키를 전송합니다. OpenAI SDK에서는 `base_url="https://llama.xheize.cc/v1"`, `api_key=키`만 설정하면 됩니다. 별도의 사용자 정의 헤더는 필요하지 않습니다.
+정적 로그인 화면을 제외한 관리 API, health, 추론 API는 로컬 접속에서도 키가 필요합니다.
+허용 목록은 포트를 포함한 Host 전체와 일치해야 하며 와일드카드는 지원하지 않습니다.
+기존 Origin 검사와 로컬 전용 업데이트 제한은 계속 적용됩니다.
+관리자 권한 또는 Windows 서비스 모드에서 원격 설정을 사용하면 시작을 거부합니다.
+로그인 자동 시작을 사용할 경우 두 환경 변수도 사용자 환경에 지속 설정해야 합니다.
+클라이언트 구간은 HTTPS를 사용하고 백엔드 포트는 신뢰하는 프록시 네트워크에서만 접근하도록 구성하세요.
 
 ## 기능
 
@@ -269,7 +289,7 @@ loopback 주소에만 바인딩됩니다. 원격 데스크톱으로 접속한 �
 Get-Content -LiteralPath "$installDir\config.json.service-key"
 ```
 
-서비스의 모든 API(`/api/*`, `/health/*`, `/v1*`, `/llama/*`)는 `X-Managed-Llama-Key` 헤더를 요구합니다. 대시보드 정적 파일만 인증 없이 제공됩니다. 인증 헤더는 llama-server에 전달하기 전에 제거하며, 별도의 `Authorization` 헤더는 유지합니다.
+서비스의 모든 API(`/api/*`, `/health/*`, `/v1*`, `/llama/*`)는 `Authorization: Bearer <API 키>` 인증을 지원합니다. 대시보드 정적 파일만 인증 없이 제공됩니다. 게이트웨이 인증에 사용한 Bearer 키는 llama-server에 전달하지 않습니다. 기존 `X-Managed-Llama-Key`도 호환성을 위해 지원하며, 이 헤더로 인증한 경우에만 별도 upstream `Authorization`을 유지합니다.
 
 서비스 제거 후 키 파일은 자동으로 삭제하지 않습니다. 키를 교체하려면 서비스와 관련 앱을 중지한 뒤 관리자 권한으로 키 파일을 삭제하고 서비스를 다시 시작하세요. 새 키가 생성되며 이전 키는 사용할 수 없게 됩니다.
 
@@ -478,7 +498,7 @@ tests/                   JavaScript UI 테스트
 | gated/private 모델 접근 실패 | 토큰 권한과 해당 저장소 접근 권한 확인 |
 | GPU 정보가 없음 | PowerShell에서 `nvidia-smi` 실행 여부 확인 |
 | 자동 실행 설정 비활성화 | 트레이의 대시보드에서만 변경 가능. 서비스 설치 경로 조건도 확인 |
-| 서비스 API가 `401` 반환 | 대시보드에 관리 키를 입력하거나 클라이언트에 `X-Managed-Llama-Key` 헤더 설정 |
+| 서비스 API가 `401` 반환 | 대시보드에 관리 키를 입력하거나 클라이언트에 `Authorization: Bearer <API 키>` 설정 |
 | `unsafe service path` | 관리자 소유의 전용 폴더, 파일 소유자, ACL과 reparse point 여부 확인 |
 
 ## 라이선스

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"managed-llama/internal/serviceauth"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -74,7 +73,7 @@ func TestServiceClientReturnsAPIError(t *testing.T) {
 
 func TestServiceClientSendsProtectedKey(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get(serviceauth.Header) != "test-service-key" {
+		if r.Header.Get("Authorization") != "Bearer test-service-key" {
 			t.Error("missing service key")
 		}
 		w.WriteHeader(http.StatusAccepted)

@@ -11,7 +11,6 @@ import (
 
 	"managed-llama/internal/api"
 	"managed-llama/internal/runner"
-	"managed-llama/internal/serviceauth"
 )
 
 var errServiceAuthentication = errors.New("대시보드를 열어 서비스 관리 키로 인증하세요")
@@ -69,7 +68,7 @@ func (c *serviceClient) request(method, path string, target any) error {
 		if err != nil {
 			return err
 		}
-		request.Header.Set(serviceauth.Header, key)
+		request.Header.Set("Authorization", "Bearer "+key)
 	}
 	response, err := c.client.Do(request)
 	if err != nil {
