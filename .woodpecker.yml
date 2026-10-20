@@ -2,6 +2,13 @@
 when:
   - event: [push, pull_request, manual]
 
+clone:
+  git:
+    image: woodpeckerci/plugin-git
+    settings:
+      # Design references are for contributors, not build/test dependencies.
+      recursive: false
+
 steps:
   - name: windows-static-and-cross-build
     image: golang:1.26.8-bookworm

@@ -30,6 +30,14 @@ func RemoteAccess(hosts, key string) (func(http.Handler) http.Handler, error) {
 				http.Error(w, "invalid remote gateway host", http.StatusForbidden)
 				return
 			}
+			// Browsers send preflight without the API key. Only forward OpenAI
+			// preflight to its CORS handler; actual requests still require auth.
+			openAI := r.URL.Path == "/v1" || strings.HasPrefix(r.URL.Path, "/v1/")
+			if openAI && r.Method == http.MethodOptions &&
+				r.Header.Get("Origin") != "" && r.Header.Get("Access-Control-Request-Method") != "" {
+				next.ServeHTTP(w, r)
+				return
+			}
 			authenticated.ServeHTTP(w, r)
 		})
 	}, nil
