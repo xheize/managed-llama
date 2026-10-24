@@ -40,6 +40,8 @@ Thumbs.db
 *.gguf
 *.part
 *.log
+*.log.[123]
+*.json.logs/
 *.test
 *.test.exe
 coverage.out

@@ -30,7 +30,7 @@ func (s Store) List() ([]Model, error) {
 	if err := s.Ensure(); err != nil {
 		return nil, err
 	}
-	var out []Model
+	out := make([]Model, 0)
 	err := filepath.WalkDir(s.Dir, func(path string, entry os.DirEntry, err error) error {
 		if err != nil {
 			return err

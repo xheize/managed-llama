@@ -35,8 +35,12 @@ type Manager struct {
 	endpoint  string
 	lastError string
 	stopping  bool
+	running   bool
+	done      chan struct{}
 	logs      []string
 	maxLogs   int
+	logPath   string
+	logError  string
 }
 
 func New() *Manager { return &Manager{maxLogs: 2000} }
@@ -114,9 +118,13 @@ func (m *Manager) Start(cfg config.Config) error {
 		return err
 	}
 	m.mu.Lock()
-	if m.cmd != nil && m.cmd.ProcessState == nil {
+	if m.running {
 		m.mu.Unlock()
 		return errors.New("llama-server is already running")
+	}
+	if err := m.prepareLogFileLocked(); err != nil {
+		m.mu.Unlock()
+		return fmt.Errorf("prepare model server log: %w", err)
 	}
 	cmd := background.HideConsole(exec.Command(exe, args...))
 	stdout, err := cmd.StdoutPipe()
@@ -137,11 +145,18 @@ func (m *Manager) Start(cfg config.Config) error {
 	m.endpoint = fmt.Sprintf("http://%s:%d", cfg.Host, cfg.Port)
 	m.lastError = ""
 	m.stopping = false
+	m.running = true
+	m.done = make(chan struct{})
+	done := m.done
 	m.appendLocked("[manager] started: " + display)
 	m.mu.Unlock()
-	go m.capture(stdout, "stdout")
-	go m.capture(stderr, "stderr")
+	var captured sync.WaitGroup
+	captured.Add(2)
+	go func() { defer captured.Done(); m.capture(stdout, "stdout") }()
+	go func() { defer captured.Done(); m.capture(stderr, "stderr") }()
 	go func() {
+		// Drain both pipes before Wait closes them, including the final lines.
+		captured.Wait()
 		err := cmd.Wait()
 		m.mu.Lock()
 		if m.stopping {
@@ -154,6 +169,10 @@ func (m *Manager) Start(cfg config.Config) error {
 			m.appendLocked("[manager] exited normally")
 		}
 		m.stopping = false
+		// Publish completion only after both streams and the exit record are
+		// persisted. Never read Cmd.ProcessState concurrently with cmd.Wait.
+		m.running = false
+		close(done)
 		m.mu.Unlock()
 	}()
 	return nil
@@ -161,11 +180,12 @@ func (m *Manager) Start(cfg config.Config) error {
 
 func (m *Manager) Stop() error {
 	m.mu.Lock()
-	if m.cmd == nil || m.cmd.Process == nil || m.cmd.ProcessState != nil {
+	if !m.running {
 		m.mu.Unlock()
 		return errors.New("llama-server is not running")
 	}
 	process := m.cmd.Process
+	done := m.done
 	m.stopping = true
 	m.appendLocked("[manager] stopping process")
 	m.mu.Unlock()
@@ -175,7 +195,7 @@ func (m *Manager) Stop() error {
 	if output, err := stop.CombinedOutput(); err != nil {
 		// The process may have exited between the status check and taskkill.
 		m.mu.Lock()
-		exited := m.cmd == nil || m.cmd.ProcessState != nil
+		exited := m.done != done || !m.running
 		if !exited {
 			m.stopping = false
 		}
@@ -184,33 +204,30 @@ func (m *Manager) Stop() error {
 			return fmt.Errorf("stop llama-server process tree: %w: %s", err, strings.TrimSpace(string(output)))
 		}
 	}
-	deadline := time.Now().Add(10 * time.Second)
-	for time.Now().Before(deadline) {
+	select {
+	case <-done:
+		return nil
+	case <-time.After(10 * time.Second):
 		m.mu.Lock()
-		exited := m.cmd == nil || m.cmd.ProcessState != nil
-		m.mu.Unlock()
-		if exited {
-			return nil
+		if m.done == done {
+			m.stopping = false
 		}
-		time.Sleep(50 * time.Millisecond)
+		m.mu.Unlock()
+		return errors.New("llama-server did not exit within 10 seconds")
 	}
-	m.mu.Lock()
-	m.stopping = false
-	m.mu.Unlock()
-	return errors.New("llama-server did not exit within 10 seconds")
 }
 
 // Shutdown is an idempotent process cleanup used when the gateway exits.
 func (m *Manager) Shutdown() error {
 	m.mu.Lock()
-	running := m.cmd != nil && m.cmd.Process != nil && m.cmd.ProcessState == nil
+	running := m.running
 	m.mu.Unlock()
 	if !running {
 		return nil
 	}
 	if err := m.Stop(); err != nil {
 		m.mu.Lock()
-		stillRunning := m.cmd != nil && m.cmd.Process != nil && m.cmd.ProcessState == nil
+		stillRunning := m.running
 		m.mu.Unlock()
 		if stillRunning {
 			return err
@@ -221,21 +238,11 @@ func (m *Manager) Shutdown() error {
 
 func (m *Manager) Restart(cfg config.Config) error {
 	m.mu.Lock()
-	running := m.cmd != nil && m.cmd.ProcessState == nil
+	running := m.running
 	m.mu.Unlock()
 	if running {
 		if err := m.Stop(); err != nil {
 			return err
-		}
-		deadline := time.Now().Add(5 * time.Second)
-		for time.Now().Before(deadline) {
-			m.mu.Lock()
-			done := m.cmd.ProcessState != nil
-			m.mu.Unlock()
-			if done {
-				break
-			}
-			time.Sleep(50 * time.Millisecond)
 		}
 	}
 	return m.Start(cfg)
@@ -243,7 +250,7 @@ func (m *Manager) Restart(cfg config.Config) error {
 
 func (m *Manager) Status() Status {
 	m.mu.Lock()
-	running := m.cmd != nil && m.cmd.ProcessState == nil
+	running := m.running
 	status := Status{Running: running, Command: m.command, Endpoint: m.endpoint, LastError: m.lastError}
 	if running {
 		status.PID = m.cmd.Process.Pid
@@ -273,10 +280,15 @@ func (m *Manager) Logs(tail int) []string {
 	return append([]string(nil), m.logs[len(m.logs)-tail:]...)
 }
 
-func (m *Manager) ClearLogs() {
+func (m *Manager) ClearLogs() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if err := m.clearLogFilesLocked(); err != nil {
+		return err
+	}
 	m.logs = nil
+	m.logError = ""
+	return nil
 }
 
 // Target returns the active llama-server endpoint without performing a health
@@ -284,7 +296,7 @@ func (m *Manager) ClearLogs() {
 func (m *Manager) Target() (string, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	running := m.cmd != nil && m.cmd.ProcessState == nil
+	running := m.running
 	return m.endpoint, running && m.endpoint != ""
 }
 
@@ -292,7 +304,7 @@ func (m *Manager) Target() (string, bool) {
 func (m *Manager) PID() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.cmd == nil || m.cmd.Process == nil || m.cmd.ProcessState != nil {
+	if !m.running {
 		return 0
 	}
 	return m.cmd.Process.Pid
@@ -321,9 +333,24 @@ func (m *Manager) capture(pipe interface{ Read([]byte) (int, error) }, source st
 }
 
 func (m *Manager) appendLocked(line string) {
-	m.logs = append(m.logs, time.Now().Format("15:04:05")+" "+line)
-	if len(m.logs) > m.maxLogs {
-		m.logs = append([]string(nil), m.logs[len(m.logs)-m.maxLogs:]...)
+	line = time.Now().Format(time.RFC3339Nano) + " " + line
+	m.appendMemoryLocked(line)
+	if err := m.writeLogLocked(line); err != nil {
+		if m.logError != err.Error() {
+			m.appendMemoryLocked("[manager] log file error: " + err.Error())
+		}
+		m.logError = err.Error()
+	} else {
+		m.logError = ""
+	}
+}
+
+func (m *Manager) appendMemoryLocked(line string) {
+	if len(m.logs) == m.maxLogs {
+		copy(m.logs, m.logs[1:])
+		m.logs[len(m.logs)-1] = line
+	} else {
+		m.logs = append(m.logs, line)
 	}
 }
 

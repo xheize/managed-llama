@@ -42,7 +42,7 @@ type AutostartController interface {
 }
 
 func New(cfg config.Config, configPath string, web embed.FS, autostart AutostartController) *Server {
-	return &Server{cfg: cfg, configPath: configPath, autostart: autostart, runner: runner.New(), resources: resources.New(), hf: hf.New(cfg.HuggingFaceBase, cfg.HuggingFaceToken), web: web}
+	return &Server{cfg: cfg, configPath: configPath, autostart: autostart, runner: runner.NewWithLogFile(filepath.Join(configPath+".logs", "llama-server.log")), resources: resources.New(), hf: hf.New(cfg.HuggingFaceBase, cfg.HuggingFaceToken), web: web}
 }
 
 func (s *Server) Handler() http.Handler {
@@ -261,7 +261,10 @@ func (s *Server) logs(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]any{"lines": s.runner.Logs(tail)})
 }
 func (s *Server) clearLogs(w http.ResponseWriter, _ *http.Request) {
-	s.runner.ClearLogs()
+	if err := s.runner.ClearLogs(); err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -337,11 +340,12 @@ func (s *Server) uploadModel(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, err)
 		return
 	}
-	_, header, err := r.FormFile("file")
+	file, header, err := r.FormFile("file")
 	if err != nil {
 		writeError(w, 400, err)
 		return
 	}
+	defer file.Close()
 	model, err := s.store().SaveUpload(header)
 	if err != nil {
 		status := http.StatusBadRequest
